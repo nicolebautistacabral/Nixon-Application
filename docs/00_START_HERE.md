@@ -1,7 +1,7 @@
 # NIXON — UPDATED BUILD PACKAGE
 ### Read this first. It replaces `README_START_HERE.md` as the index.
 
-**Status:** Decisions locked. Impeccable installed. `PRODUCT.md` written. No application code yet.
+**Status:** Decisions locked. Impeccable installed. `PRODUCT.md` written. Architecture revised for n8n (§08). No application code yet.
 **Branch:** `claude/impeccable-design-system-je3mcw`
 **Date:** 2026-09-09
 
@@ -30,6 +30,7 @@ Your four documents (`CLAUDE_CODE_BUILD_SPEC.md`, `CLAUDE_CODE_MASTER_PROMPT_REV
 | `05_IMPROVEMENTS_AND_CORRECTIONS.md` | Design and engineering improvements. Spec conflicts. Defects in the existing code samples. |
 | `06_DECISIONS_I_NEED_FROM_YOU.md` | The decision list. **Answered — see below.** |
 | `07_MEMORY_AND_BOARD.md` | The two requirements you added: chatbox memory, and the per-agent board. |
+| `08_N8N_ARCHITECTURE.md` | **n8n as the automation layer.** Assessment, the split, function-by-function reassignment, revised phases. |
 
 ---
 
