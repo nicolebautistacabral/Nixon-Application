@@ -268,9 +268,106 @@ So Constraint 1 from `00_START_HERE.md` still stands, and n8n slightly changes t
 
 ---
 
-## 9. DECISIONS
+## 9. WORKFLOW TOPOLOGY — REVISING MY OWN RECOMMENDATION
 
-1. **Confirm the split**, or tell me where you want the boundary moved.
-2. **Redis drops out** — confirm you are fine with that (n8n replaces BullMQ).
-3. **Where does n8n run** during the build — local Docker, or set up always-on hosting now?
-4. **Do the seven agents each get their own n8n workflow**, or one router workflow with seven branches? I recommend one workflow per agent: clearer to edit, easier to disable one without touching the others.
+I said "one workflow per agent." That is right as far as it goes, and it is clearly better than the alternative — but on inspection it is under-specified, and taken literally it produces one unusable canvas. Here is the corrected version.
+
+### 9.1 Why "one router with seven branches" is the wrong answer
+
+Ruling this out first, because it is the intuitive choice given Nixon is a coordinator:
+
+- One bad edit breaks all seven agents at once.
+- You cannot disable Ember for a week without touching Helix.
+- Execution logs become a single undifferentiated stream — when something fails at 3am you cannot tell whose failure it was.
+- Large canvases get slow to open and hard to navigate, and this one would be very large.
+
+The conceptual appeal — Nixon routes, so Nixon should be one workflow — is real, but it confuses the *logical* hierarchy with the *file* layout. Nixon can be the router without everything living in Nixon's canvas.
+
+### 9.2 Why literal "one per agent" also breaks
+
+Helix has twenty functions across four categories: the logbook, the thesis, the presentation, and daily learning. A single Helix workflow holding all of that, with a Telegram trigger *and* a schedule trigger *and* a webhook entry point, is a canvas nobody can read — including me, six weeks from now, when you ask for a change.
+
+The problem is that **scheduled work and conversational work have different shapes and should not share a canvas.** A 07:00 lesson is a straight line: fire → query → generate → send. A "log that" from you is a branching conversation with tools and a memory context. Putting both in one workflow means every execution log mixes two unrelated things.
+
+### 9.3 The shape I actually recommend — four layers
+
+```
+  ┌─ LAYER 1 ── ENTRY ────────────────────────────────────┐
+  │  nixon.router          app posts here; classifies      │
+  │                        and dispatches                  │
+  │  nixon.telegram-in     Telegram Trigger; commands      │
+  └────────────────────────┬──────────────────────────────┘
+                           │  Execute Sub-workflow
+  ┌─ LAYER 2 ── AGENTS ────▼──────────────────────────────┐
+  │  agent.helix    agent.ember     agent.compass          │
+  │  agent.ledger   agent.cadence   agent.forge            │
+  │                                                        │
+  │  One per agent. Each is ONE AI Agent node with that    │
+  │  agent's system prompt, tool set, and memory.          │
+  │  Called, never triggered directly.                     │
+  └────────────────────────┬──────────────────────────────┘
+                           │
+  ┌─ LAYER 3 ── SHARED SERVICES ──▼───────────────────────┐
+  │  svc.notify          push + Telegram + in-app fan-out  │
+  │                      (improvement C-7, one place)      │
+  │  svc.memory-context  fetch active standing instructions│
+  │  svc.board           create / update / complete items  │
+  │  svc.approve         the Wait gate — see 9.5           │
+  └───────────────────────────────────────────────────────┘
+
+  ┌─ LAYER 4 ── SCHEDULES (independent, thin) ────────────┐
+  │  cron.pulse-morning      08:00                         │
+  │  cron.pulse-midday       12:00                         │
+  │  cron.pulse-evening      18:00                         │
+  │  cron.pulse-final        21:30                         │
+  │  cron.cadence-lesson     07:00                         │
+  │  cron.cadence-quiz       20:00                         │
+  │  cron.helix-concept      daily                         │
+  │  cron.deadlines          daily — competitions          │
+  │  cron.rollup             weekly                        │
+  │  cron.overload           daily                         │
+  │                                                        │
+  │  Each is a Schedule Trigger, a query, and a call into  │
+  │  Layer 2 or 3. Rarely more than five nodes.            │
+  └───────────────────────────────────────────────────────┘
+```
+
+**Roughly 22 workflows**, none of them large. Compare with ~45 if every function got its own, or 1–7 unusable ones.
+
+### 9.4 What this buys you, concretely
+
+| Concern | How the layering answers it |
+|---|---|
+| "Turn Ember off this week" | Disable `agent.ember`. Nothing else moves. |
+| "The Morning Brief didn't arrive" | One workflow to open: `cron.pulse-morning`. Its execution log is only ever about the Morning Brief. |
+| "Change how notifications look" | One place: `svc.notify`. Not eleven. |
+| "Move Final Sync to 21:00" | One field in `cron.pulse-final`. Thirty seconds, and you do it, not me. |
+| "Add Korean to Cadence" | `agent.cadence` gains a language parameter. The four cron workflows are untouched — this is what "language is a column, not a fork" looks like in practice. |
+| Sprawl risk from §7 | Answered by naming convention plus Layer 3. Shared logic exists once. |
+
+### 9.5 The one thing to verify before committing to this
+
+The design puts Wait nodes inside sub-workflows — `svc.approve` is called by an agent workflow, which was itself called by the router. That pattern had **a real bug in n8n before v2.0**: a sub-workflow containing a Wait-on-webhook node left the parent execution stuck in a permanent "Running" state and it never proceeded.
+
+**n8n 2.0 fixed it.** Human-in-the-loop steps living in sub-workflows can now pause the parent correctly, and the parent receives output only once the human decision is known. The fix is what makes centralising approval logic as a shared service viable at all.
+
+So two constraints follow, and they are not optional:
+
+1. **Hard version floor: n8n 2.0 or later.** On anything earlier this architecture deadlocks. Pin the Docker image tag; do not run `latest` and discover a regression at 3am.
+2. **Every Wait node gets an explicit timeout with a fallback path.** Unbounded webhook waits produce zombie executions that sit in the database forever. Your Asks screen already implies this — §03 Stage 4 raised "what happens to an unanswered ask after 24h" as an open question. It is now a required setting, not a nice-to-have. My suggestion: 48h timeout, then the item returns to `todo` with a note, and the next pulse mentions it.
+
+### 9.6 Naming and version control
+
+- `layer.name` convention throughout: `agent.helix`, `cron.pulse-morning`, `svc.notify`.
+- Export all workflows to `n8n/workflows/*.json` in this repo on a schedule. It will not diff beautifully — that limitation from §2.4 stands — but a recoverable history beats none, and a naming convention at least makes the filenames meaningful.
+- Keep every Code node's body under 20 lines. Past that, it belongs in the app behind an HTTP call, where it can be tested.
+
+---
+
+## 10. DECISIONS
+
+1. **Confirm the split** in §3, or say where you want the boundary moved.
+2. **Redis and BullMQ drop out** — confirm.
+3. **Where does n8n run during the build** — local Docker now, hosting decided later?
+4. **Confirm the four-layer topology** in §9.3, which supersedes my earlier flat "one workflow per agent."
+5. **n8n 2.0+ pinned** and a 48h default on approval waits — confirm, or set a different timeout.
