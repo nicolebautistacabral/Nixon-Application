@@ -1,7 +1,7 @@
 # NIXON — UPDATED BUILD PACKAGE
 ### Read this first. It replaces `README_START_HERE.md` as the index.
 
-**Status:** Decisions locked. Impeccable installed. `PRODUCT.md` written. Architecture revised for n8n (§08). No application code yet.
+**Status:** Scope narrowed to **workflows only** — no interface. See `09`, which is now the live plan. Schema written and tested; runtime stack ready.
 **Branch:** `claude/impeccable-design-system-je3mcw`
 **Date:** 2026-09-09
 
@@ -30,7 +30,10 @@ Your four documents (`CLAUDE_CODE_BUILD_SPEC.md`, `CLAUDE_CODE_MASTER_PROMPT_REV
 | `05_IMPROVEMENTS_AND_CORRECTIONS.md` | Design and engineering improvements. Spec conflicts. Defects in the existing code samples. |
 | `06_DECISIONS_I_NEED_FROM_YOU.md` | The decision list. **Answered — see below.** |
 | `07_MEMORY_AND_BOARD.md` | The two requirements you added: chatbox memory, and the per-agent board. |
-| `08_N8N_ARCHITECTURE.md` | **n8n as the automation layer.** Assessment, the split, function-by-function reassignment, revised phases. |
+| `08_N8N_ARCHITECTURE.md` | The n8n assessment and the Wait-node findings. Superseded on scope by `09`. |
+| `09_WORKFLOW_SYSTEM.md` | **THE LIVE PLAN.** Workflows only, Calendar as the spine. 25 workflows, the digest spec, build order. |
+
+**Dormant** — the dashboard is deferred, not cancelled: `02_DESIGN_DIRECTION.md`, `03_SECTION_BY_SECTION.md`, and the UI layout in `07` Part 2. The memory design in `07` Part 1 and the schema in Part 2 are both live.
 
 ---
 

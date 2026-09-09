@@ -1,0 +1,84 @@
+# Nixon — local development stack.
+#
+# Start:   docker compose up -d
+# n8n UI:  http://localhost:5678
+# Stop:    docker compose down          (data survives; volumes are named)
+#
+# Two databases in one Postgres container:
+#   n8n    — n8n's own internal tables
+#   nixon  — our schema (db/schema.sql)
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: n8n
+      TZ: Europe/Lisbon
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Runs once, on an empty volume only. Creates the nixon database and
+      # applies the schema. To re-apply later, run it by hand with psql.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      - ./db/schema.sql:/schema.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"     # localhost only, never 0.0.0.0
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d n8n"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    # PIN AN EXACT PATCH before relying on this (e.g. n8nio/n8n:2.3.1).
+    # 2.x is a hard floor: Wait nodes inside sub-workflows deadlocked the
+    # parent execution before 2.0, and svc.approve is exactly that pattern.
+    # Running `latest` risks a regression surfacing at 03:00.
+    image: n8nio/n8n:2
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # --- Persistence -------------------------------------------------
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: ${POSTGRES_USER}
+      DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+
+      # --- Credential encryption ---------------------------------------
+      # Back this value up somewhere offline. Every stored credential
+      # (Google, Telegram, Gumroad, Zoho, Anthropic) is encrypted with it.
+      # Lose it and every one of them is unrecoverable.
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+
+      # --- Time ---------------------------------------------------------
+      # Every cron expression and Wait-until-time is evaluated in this zone.
+      GENERIC_TIMEZONE: Europe/Lisbon
+      TZ: Europe/Lisbon
+
+      # --- Access -------------------------------------------------------
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: ${WEBHOOK_URL}
+      N8N_SECURE_COOKIE: "false"          # http on localhost only
+
+      # --- Housekeeping --------------------------------------------------
+      # Parked Wait executions are NOT pruned; only finished ones are.
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "336"      # hours (14 days)
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_RUNNERS_ENABLED: "true"
+    ports:
+      - "127.0.0.1:5678:5678"     # localhost only
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/workflows      # import/export target
+
+volumes:
+  postgres_data:
+  n8n_data:

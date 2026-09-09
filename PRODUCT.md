@@ -10,9 +10,11 @@ web
 
 Confirmed by the user. Frontend: React + Vite + Tailwind. Backend: Node.js + Express (TypeScript). Database: Supabase (hosted PostgreSQL, row-level security). Push: Firebase Cloud Messaging. Auth: single-user server-side session auth, argon2id + TOTP.
 
-**Automation substrate: self-hosted n8n (Community Edition).** It owns scheduled triggers, external integrations, Telegram send and receive, notification fan-out, the seven agents as AI Agent workflows, and the human-in-the-loop confirmation gates that the autonomy protocol requires. The application retains the interface, authentication, database schema and encryption, the memory layer, the board state machine, and every boundary check that must not depend on a prompt. BullMQ and Redis are removed; n8n provides scheduling, retry, and backoff. The split is recorded in `docs/08_N8N_ARCHITECTURE.md`.
+**The system is workflows only. There is no user interface.** Self-hosted n8n (Community Edition, 2.x) is the whole runtime: scheduled triggers, external integrations, Telegram send and receive, the seven agents as AI Agent workflows, and the human-in-the-loop gates the autonomy protocol requires. Postgres holds the source of truth. A dedicated Google Calendar carries both the plan and the record of work. A Google Sheet mirrors the board for reading. Telegram is the only conversation surface. BullMQ and Redis are removed; n8n provides scheduling, retry, and backoff. The design is recorded in `docs/09_WORKFLOW_SYSTEM.md`.
 
-Hosting: **local machine**, chosen for zero cost. This is recorded as a confirmed constraint with a known consequence: scheduled automations do not fire while the machine is asleep or off. An always-on execution path for the time-based automations is an open decision, not a settled fact.
+A React dashboard is **deferred, not cancelled**: the schema carries `user_id` throughout and agent logic sits behind callable workflows, so one can be added later without rework.
+
+Hosting: **local machine** (Docker), chosen for zero cost. This is recorded as a confirmed constraint with a known consequence: scheduled automations do not fire while the machine is asleep or off. An always-on execution path for the time-based automations is an open decision, not a settled fact.
 
 ## Users
 
