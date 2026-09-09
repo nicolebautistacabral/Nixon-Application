@@ -1,0 +1,33 @@
+# Secrets — never commit these
+.env
+.env.local
+.env.*.local
+*.pem
+*-service-account*.json
+firebase-adminsdk-*.json
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.vite/
+
+# Impeccable working artifacts (generated, not source)
+.impeccable/review/
+.impeccable/build/
+.impeccable/mocks/
+.impeccable/live/
+.impeccable/config.local.json
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
