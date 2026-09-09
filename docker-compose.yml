@@ -1,4 +1,7 @@
-# Nixon — local development stack.
+# Nixon — OPTIONAL local development stack.
+#
+# Production runs on n8n Cloud with Postgres on Supabase; this file is only
+# for running the stack on your own machine while developing.
 #
 # Start:   docker compose up -d
 # n8n UI:  http://localhost:5678

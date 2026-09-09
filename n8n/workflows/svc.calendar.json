@@ -1,0 +1,216 @@
+{
+  "name": "svc.calendar",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "0df9dd96-27bd",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the calendar event from the task. Glyph encodes state.\nconst GLYPH = { todo:'\\u25CB', in_progress:'\\u25D0', blocked:'\\u23F8',\n                done:'\\u2713', cancelled:'\\u2715' };\nreturn $input.all().map(item => {\n  const t = item.json;\n  const glyph = GLYPH[t.state] || '\\u25CB';\n  const start = t.due_at || new Date(Date.now() + 3600000).toISOString();\n  const end   = new Date(new Date(start).getTime() + 30*60000).toISOString();\n  return { json: {\n    ...t,\n    summary: `${glyph} ${t.agent_name} \\u2014 ${t.title}`,\n    description: `nixon:${t.task_id}\\n\\n${t.detail || ''}`,\n    start, end,\n    hasEvent: Boolean(t.calendar_event_id),\n  }};\n});"
+      },
+      "id": "0892b45e-1312",
+      "name": "Build Event",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-event",
+              "leftValue": "={{ $json.hasEvent }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6dd3cac9-f5c6",
+      "name": "Event Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendar": {
+          "__rl": true,
+          "value": "={{ $vars.NIXON_CALENDAR_ID }}",
+          "mode": "id"
+        },
+        "eventId": "={{ $json.calendar_event_id }}",
+        "updateFields": {
+          "summary": "={{ $json.summary }}",
+          "description": "={{ $json.description }}",
+          "color": "={{ $json.calendar_color_id }}"
+        }
+      },
+      "id": "eb918f61-9555",
+      "name": "Update Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        620,
+        200
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_GCAL_CRED",
+          "name": "Nixon Calendar"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "={{ $vars.NIXON_CALENDAR_ID }}",
+          "mode": "id"
+        },
+        "start": "={{ $json.start }}",
+        "end": "={{ $json.end }}",
+        "additionalFields": {
+          "summary": "={{ $json.summary }}",
+          "description": "={{ $json.description }}",
+          "color": "={{ $json.calendar_color_id }}"
+        }
+      },
+      "id": "c4fd5235-290b",
+      "name": "Create Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        620,
+        400
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_GCAL_CRED",
+          "name": "Nixon Calendar"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE tasks SET calendar_event_id = $1 WHERE id = $2::uuid;",
+        "options": {
+          "queryReplacement": "={{ [$json.id, $('Build Event').item.json.task_id] }}"
+        }
+      },
+      "id": "750027b7-cbff",
+      "name": "Store Event Id",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        840,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED",
+          "name": "Nixon Supabase"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Build Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Event": {
+      "main": [
+        [
+          {
+            "node": "Event Exists?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Event Exists?": {
+      "main": [
+        [
+          {
+            "node": "Update Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Event": {
+      "main": [
+        [
+          {
+            "node": "Store Event Id",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Lisbon",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "nixon"
+  },
+  "tags": [
+    {
+      "name": "nixon"
+    }
+  ],
+  "staticData": null,
+  "notes": "Task -> event on the dedicated Nixon sub-calendar ONLY. Never writes to a personal or university calendar. NIXON_CALENDAR_ID must be a calendar created solely for this. Expects: task_id, agent_name, title, state, detail, due_at, calendar_event_id, calendar_color_id."
+}

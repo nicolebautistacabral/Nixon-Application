@@ -10,11 +10,11 @@ web
 
 Confirmed by the user. Frontend: React + Vite + Tailwind. Backend: Node.js + Express (TypeScript). Database: Supabase (hosted PostgreSQL, row-level security). Push: Firebase Cloud Messaging. Auth: single-user server-side session auth, argon2id + TOTP.
 
-**The system is workflows only. There is no user interface.** Self-hosted n8n (Community Edition, 2.x) is the whole runtime: scheduled triggers, external integrations, Telegram send and receive, the seven agents as AI Agent workflows, and the human-in-the-loop gates the autonomy protocol requires. Postgres holds the source of truth. A dedicated Google Calendar carries both the plan and the record of work. A Google Sheet mirrors the board for reading. Telegram is the only conversation surface. BullMQ and Redis are removed; n8n provides scheduling, retry, and backoff. The design is recorded in `docs/09_WORKFLOW_SYSTEM.md`.
+**The system is workflows only. There is no user interface.** n8n Cloud (2.x) is the whole runtime: scheduled triggers, external integrations, Telegram send and receive, the seven agents as AI Agent workflows, and the human-in-the-loop gates the autonomy protocol requires. Postgres holds the source of truth. A dedicated Google Calendar carries both the plan and the record of work. A Google Sheet mirrors the board for reading. Telegram is the only conversation surface. BullMQ and Redis are removed; n8n provides scheduling, retry, and backoff. The design is recorded in `docs/09_WORKFLOW_SYSTEM.md`.
 
 A React dashboard is **deferred, not cancelled**: the schema carries `user_id` throughout and agent logic sits behind callable workflows, so one can be added later without rework.
 
-Hosting: **local machine** (Docker), chosen for zero cost. This is recorded as a confirmed constraint with a known consequence: scheduled automations do not fire while the machine is asleep or off. An always-on execution path for the time-based automations is an open decision, not a settled fact.
+Hosting: **n8n Cloud**, with Postgres on Supabase. Being always on, it removes the earlier constraint that scheduled automations could only fire while a local machine was awake. `docker-compose.yml` remains in the repository for optional local development only.
 
 ## Users
 

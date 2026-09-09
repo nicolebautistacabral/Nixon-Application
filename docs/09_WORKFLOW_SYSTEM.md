@@ -46,7 +46,7 @@ So `◐ Helix — Methods section draft` on Thursday at 14:00. When it finishes 
 
 ---
 
-## 3. WORKFLOW INVENTORY — 25
+## 3. WORKFLOW INVENTORY — 24
 
 Naming is `layer.name`. Agent workflows are **called**, never triggered directly.
 
@@ -83,7 +83,7 @@ Execute Sub-workflow Trigger
 
 The boundary checks are a **Code node on the delivery path, not prompt text**. A prompt is guidance; these must not fail.
 
-### Shared services — 6
+### Shared services — 7
 The only workflows that write. Everything else calls these.
 
 | Workflow | Does |
@@ -94,6 +94,7 @@ The only workflows that write. Everything else calls these.
 | `svc.notify` | Telegram send, quiet-hours check, idempotency key, log |
 | `svc.approve` | the Wait gate for irreversible actions |
 | `svc.digest` | **builds the status roll-up.** Called by every pulse. |
+| `svc.mirror` | Postgres → the readable Google Sheet. Called by `svc.board`, never scheduled. |
 
 **`svc.approve`** — the autonomy protocol's confirm gate:
 ```
@@ -109,13 +110,12 @@ Execute Sub-workflow Trigger  (task_id, what, target)
                         next pulse mentions it
 ```
 
-### Schedules — 10
+### Schedules — 9
 Each is thin: trigger, query, call a service. Rarely more than five nodes.
 
 `cron.pulse-morning` 08:00 · `cron.pulse-midday` 12:00 · `cron.pulse-evening` 18:00 · `cron.pulse-final` **21:30**
 `cron.cadence-lesson` 07:00 · `cron.cadence-quiz` 20:00 · `cron.helix-concept` daily
 `cron.deadlines` daily (competitions at 7/3/1 days) · `cron.stale` daily (aging nudge) · `cron.rollup` weekly
-`cron.mirror` — Postgres → the Sheet board
 
 Final Sync is **21:30, not 22:00** — at 22:00 it lands exactly on the quiet-hours boundary and gets queued to the following morning, arriving on top of the Morning Brief.
 
@@ -213,6 +213,16 @@ The §6 checklist was written for an internet-facing app. What replaces it:
 
 ---
 
-## 8. STANDING CAVEAT
+## 8. RUNTIME — n8n CLOUD
 
-On local hosting, every Schedule Trigger and the Calendar Trigger's polling run **only while your machine is awake**. Nothing in this architecture changes when it moves to an always-on host, so that decision can wait until the system has earned it.
+**The always-on problem is solved.** Every earlier document carried a caveat that scheduled triggers only fire while the laptop is awake. n8n Cloud is always on, so the pulses, the 07:00 lesson, and the deadline reminders fire regardless of your machine. `docker-compose.yml` demotes to optional local-development tooling.
+
+**Postgres moves to Supabase** — Cloud provides no database. The schema applies unchanged. Daily cron traffic also keeps a free Supabase project from idling into a pause.
+
+**Execution economics, verified — and they favour this architecture:**
+- Polling triggers count an execution **only when they find data**. Empty polls are free, so `cal.trigger` can poll every minute at no cost.
+- **Sub-workflows do not count separately.** One run of a parent is one execution however many `svc.*` calls it makes.
+
+That second fact changed a design decision: `cron.mirror` was a scheduled workflow burning an execution per run. As **`svc.mirror`**, called by `svc.board`, it costs nothing and is never stale. The schedule is deleted, and the inventory is 24 workflows rather than 25.
+
+Steady-state usage lands near **1,200–1,500 executions/month** — inside Starter's 2,500, though heavy Telegram conversation is the variable most likely to push past it.

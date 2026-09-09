@@ -1,0 +1,193 @@
+{
+  "name": "svc.board",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e692a153-09ed",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Single writer to `tasks`. Builds a parameterised statement per action.\n// No string concatenation of user input into SQL: values ride in params.\nconst i = $input.first().json;\nconst action = i.action || 'create';\nconst M = {\n  create:   { sql: `INSERT INTO tasks (user_id, agent_id, thread, title, detail, state, origin, source_message_id, due_at)\n                    VALUES ($1::uuid,(SELECT id FROM agents WHERE slug=$2),$3,$4,$5,'todo',$6,$7::uuid,$8)\n                    RETURNING id::text`,\n              params: [i.user_id, i.agent, i.thread || null, i.title, i.detail || null,\n                       i.origin || 'user', i.source_message_id || null, i.due_at || null] },\n  start:    { sql: `UPDATE tasks SET state='in_progress', started_at=NOW() WHERE id=$1::uuid RETURNING id::text`,\n              params: [i.task_id] },\n  block:    { sql: `UPDATE tasks SET state='blocked', blocked_reason=$2, resume_url=$3,\n                    blocked_until=NOW()+INTERVAL '48 hours' WHERE id=$1::uuid RETURNING id::text`,\n              params: [i.task_id, i.reason || null, i.resume_url || null] },\n  complete: { sql: `UPDATE tasks SET state='done', completed_at=NOW() WHERE id=$1::uuid RETURNING id::text`,\n              params: [i.task_id] },\n  cancel:   { sql: `UPDATE tasks SET state='cancelled', cancelled_at=NOW() WHERE id=$1::uuid RETURNING id::text`,\n              params: [i.task_id] },\n};\nconst m = M[action];\nif (!m) throw new Error(`svc.board: unknown action '${action}'`);\nif (action === 'create' && !i.title) throw new Error('svc.board: create needs a title');\nif (action !== 'create' && !i.task_id) throw new Error(`svc.board: ${action} needs a task_id`);\nreturn [{ json: { ...i, action, sql: m.sql, params: m.params } }];"
+      },
+      "id": "5f76a30a-673e",
+      "name": "Build Statement",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      },
+      "id": "9b2ed5cf-741a",
+      "name": "Write Task",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        400,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED",
+          "name": "Nixon Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT t.id::text AS task_id, t.title, t.detail, t.state, t.due_at,\n       t.calendar_event_id, a.name AS agent_name, a.calendar_color_id\nFROM tasks t JOIN agents a ON a.id=t.agent_id WHERE t.id=$1::uuid;",
+        "options": {
+          "queryReplacement": "={{ [$json.id] }}"
+        }
+      },
+      "id": "fe2bd619-4280",
+      "name": "Load For Calendar",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        600,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED",
+          "name": "Nixon Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_SVC_CALENDAR_ID",
+          "mode": "list",
+          "cachedResultName": "svc.calendar"
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "10cfc398-8460",
+      "name": "Sync Calendar",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_SVC_MIRROR_ID",
+          "mode": "list",
+          "cachedResultName": "svc.mirror"
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      },
+      "id": "ea77e0d2-c119",
+      "name": "Mirror To Sheet",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1000,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Build Statement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Statement": {
+      "main": [
+        [
+          {
+            "node": "Write Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Task": {
+      "main": [
+        [
+          {
+            "node": "Load For Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load For Calendar": {
+      "main": [
+        [
+          {
+            "node": "Sync Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Calendar": {
+      "main": [
+        [
+          {
+            "node": "Mirror To Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Lisbon",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "nixon"
+  },
+  "tags": [
+    {
+      "name": "nixon"
+    }
+  ],
+  "staticData": null,
+  "notes": "THE SINGLE WRITER TO `tasks`. Nothing else in the system writes that table. Actions: create | start | block | complete | cancel. Every change syncs the calendar then mirrors the Sheet. After importing, repoint the two Execute Workflow nodes at your imported svc.calendar and svc.mirror."
+}

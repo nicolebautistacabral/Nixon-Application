@@ -1,0 +1,307 @@
+{
+  "name": "nixon.telegram-in",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "b9e4e415-5b9e",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_TELEGRAM_CRED",
+          "name": "Nixon Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "chat-allowlist",
+              "leftValue": "={{ $json.message.chat.id.toString() }}",
+              "rightValue": "={{ $vars.NIXON_TELEGRAM_CHAT_ID }}",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "05432e94-db1a",
+      "name": "Is It Nicole?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "a46bf61d-0f2c",
+      "name": "Reject Silently",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        440,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO messages (user_id, role, body, source)\nVALUES ((SELECT id FROM users LIMIT 1),'user',$1,'telegram')\nRETURNING id::text, user_id::text;",
+        "options": {
+          "queryReplacement": "={{ [$json.message.text || ''] }}"
+        }
+      },
+      "id": "2293c8e2-fe84",
+      "name": "Capture Message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        440,
+        200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED",
+          "name": "Nixon Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Batch 1 classifier: deterministic only. The Claude-backed classifier arrives\n// with the agents in batch 4. Keeping it rule-based here means the spine can be\n// tested end to end without an Anthropic credential.\nconst text = ($json.message?.text || '').trim();\nconst lower = text.toLowerCase();\nconst AGENTS = {\n  helix:   ['lab','plate','wp1','wp2','wp3','thesis','logbook','hematocrit','ic50','malaria','dd2','3d7'],\n  ember:   ['poem','manuscript','competition','chantpaint','neurogenicole','caption','post'],\n  compass: ['student','lesson','evaluation','qarint','tutor','campaign','marketing','zoho'],\n  ledger:  ['gumroad','product','revenue','sale','pricing','launch'],\n  cadence: ['portuguese','quiz','vocab','lesson pt','portugues'],\n  forge:   ['script','deploy','automation','workflow','api','tool'],\n};\nlet agent = 'nixon', best = 0;\nfor (const [slug, words] of Object.entries(AGENTS)) {\n  const hits = words.filter(w => lower.includes(w)).length;\n  if (hits > best) { best = hits; agent = slug; }\n}\nconst isCommand = text.startsWith('/');\nconst command = isCommand ? lower.split(/[\\s@]/)[0] : null;\n// A task is an imperative request. Questions and acknowledgements are not.\nconst VERBS = ['draft','write','find','get','log','check','make','build','send',\n               'prepare','review','search','update','add','create','plan'];\nconst looksLikeTask = !isCommand && text.length > 8 &&\n  (VERBS.some(v => lower.startsWith(v) || lower.includes(' ' + v + ' ')) ) &&\n  !text.endsWith('?');\nreturn [{ json: {\n  body: text, agent, command, isCommand,\n  intent: isCommand ? 'command' : (looksLikeTask ? 'task' : 'note'),\n  title: text.length > 90 ? text.slice(0, 87) + '\\u2026' : text,\n}}];"
+      },
+      "id": "bd433fbe-7e73",
+      "name": "Classify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-task",
+              "leftValue": "={{ $json.intent }}",
+              "rightValue": "task",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "af61d072-86f6",
+      "name": "Is It A Task?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "REPLACE_SVC_BOARD_ID",
+          "mode": "list",
+          "cachedResultName": "svc.board"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "action": "create",
+            "user_id": "={{ $('Capture Message').item.json.user_id }}",
+            "source_message_id": "={{ $('Capture Message').item.json.id }}",
+            "agent": "={{ $json.agent }}",
+            "title": "={{ $json.title }}",
+            "detail": "={{ $json.body }}",
+            "origin": "user"
+          }
+        },
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "853edbd3-89d0",
+      "name": "Create Task",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $vars.NIXON_TELEGRAM_CHAT_ID }}",
+        "text": "={{ '\\u2713 Noted \\u2014 <b>' + $('Classify').item.json.agent + '</b>: ' + $('Classify').item.json.title }}",
+        "additionalFields": {
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "a1c7f7cb-afed",
+      "name": "Confirm",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        120
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "REPLACE_TELEGRAM_CRED",
+          "name": "Nixon Bot"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "ee7ea447-59d7",
+      "name": "Acknowledge",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Is It Nicole?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is It Nicole?": {
+      "main": [
+        [
+          {
+            "node": "Capture Message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Silently",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Capture Message": {
+      "main": [
+        [
+          {
+            "node": "Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify": {
+      "main": [
+        [
+          {
+            "node": "Is It A Task?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is It A Task?": {
+      "main": [
+        [
+          {
+            "node": "Create Task",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acknowledge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Task": {
+      "main": [
+        [
+          {
+            "node": "Confirm",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Lisbon",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "nixon"
+  },
+  "tags": [
+    {
+      "name": "nixon"
+    }
+  ],
+  "staticData": null,
+  "notes": "THE ONLY ENTRY POINT. The chat-ID allowlist is the FIRST node after the trigger: anyone who finds the bot is rejected before a single row is written. Capture is verbatim and happens before interpretation, so a misclassification never loses what you actually said. Batch 1 uses a rule-based classifier; the Claude one lands in batch 4."
+}

@@ -1,0 +1,115 @@
+{
+  "name": "svc.mirror",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "6cfb56bb-f8dc",
+      "name": "When Called",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT t.id::text AS task_id, a.name AS agent, t.title, t.state,\n       COALESCE(t.thread,'') AS thread,\n       to_char(t.created_at AT TIME ZONE 'Europe/Lisbon','YYYY-MM-DD HH24:MI') AS created,\n       COALESCE(to_char(t.due_at AT TIME ZONE 'Europe/Lisbon','YYYY-MM-DD HH24:MI'),'') AS due,\n       COALESCE(to_char(t.completed_at AT TIME ZONE 'Europe/Lisbon','YYYY-MM-DD HH24:MI'),'') AS completed,\n       COALESCE(LEFT(m.body,120),'') AS you_said\nFROM tasks t\nJOIN agents a ON a.id = t.agent_id\nLEFT JOIN messages m ON m.id = t.source_message_id\nWHERE t.state IN ('todo','in_progress','blocked')\n   OR t.completed_at > NOW() - INTERVAL '14 days'\nORDER BY CASE t.state WHEN 'blocked' THEN 0 WHEN 'in_progress' THEN 1\n                      WHEN 'todo' THEN 2 ELSE 3 END, t.created_at;",
+        "options": {}
+      },
+      "id": "d85f01ae-9a17",
+      "name": "Read Board",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "REPLACE_POSTGRES_CRED",
+          "name": "Nixon Supabase"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $vars.NIXON_BOARD_SHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Board",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "matchingColumns": [
+            "task_id"
+          ],
+          "value": {}
+        },
+        "options": {}
+      },
+      "id": "e8ec393d-66c0",
+      "name": "Write Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_SHEETS_CRED",
+          "name": "Nixon Sheets"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "When Called": {
+      "main": [
+        [
+          {
+            "node": "Read Board",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Board": {
+      "main": [
+        [
+          {
+            "node": "Write Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Lisbon",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "nixon"
+  },
+  "tags": [
+    {
+      "name": "nixon"
+    }
+  ],
+  "staticData": null,
+  "notes": "Postgres -> readable Google Sheet. Called by svc.board on every state change, never scheduled: sub-workflow runs do not consume an n8n Cloud execution, so this is free and always current. Sheet needs a header row whose first column is task_id."
+}
