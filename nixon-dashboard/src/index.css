@@ -1,0 +1,23 @@
+@import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  @apply font-sans antialiased text-white;
+  /* Static fallback; ShaderBackground (Phase 4) paints over this. */
+  background: linear-gradient(135deg, #0ea5e9, #6366f1, #a855f7, #ec4899);
+  background-attachment: fixed;
+}
