@@ -2,6 +2,7 @@
 import { Type, type FunctionDeclaration } from 'npm:@google/genai@2'
 import { db } from './db.ts'
 import type { ToolExecutor } from './gemini.ts'
+import { runSubagent } from './subagents.ts'
 
 const AGENTS = ['nixon', 'helix', 'cadence', 'compass', 'ember', 'ledger', 'forge']
 const STATUSES = ['open', 'in_progress', 'done']
@@ -198,7 +199,7 @@ export const executeNixonTool: ToolExecutor = async (name, a) => {
       return data
     }
     case 'delegate':
-      return `agent ${String(a.agent)} not wired yet — answer briefly yourself for now and say the specialist arrives soon.`
+      return await runSubagent(String(a.agent), String(a.request ?? ''))
     case 'think':
       return a.thought ?? ''
     default:
