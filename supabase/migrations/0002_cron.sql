@@ -1,0 +1,12 @@
+-- Nixon — scheduled pulses (Phase 6)
+-- PLACEHOLDER: do NOT run via `supabase db push` yet.
+-- In Phase 6, replace REF and SECRET with your values and paste this into
+-- Supabase → SQL Editor. The pulse function decides what to send by Lisbon
+-- time, so these two hourly jobs are DST-proof.
+
+-- select cron.schedule('nixon-pulse-hourly','0 * * * *',
+--  $$select net.http_post('https://REF.supabase.co/functions/v1/pulse',
+--    '{"Content-Type":"application/json","x-nixon-secret":"SECRET"}'::jsonb,'{}'::jsonb)$$);
+-- select cron.schedule('nixon-pulse-2215','15 * * * *',
+--  $$select net.http_post('https://REF.supabase.co/functions/v1/pulse',
+--    '{"Content-Type":"application/json","x-nixon-secret":"SECRET"}'::jsonb,'{}'::jsonb)$$);
