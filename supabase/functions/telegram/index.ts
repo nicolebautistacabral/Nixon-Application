@@ -1,6 +1,10 @@
-// Telegram webhook: verify secret → handle /start or echo → always 200.
-import { getSetting, setSetting } from '../_shared/db.ts'
+// Telegram webhook: verify secret → /start or run Nixon → always 200 fast.
+import { getSetting, loadHistory, saveTurn, setSetting } from '../_shared/db.ts'
 import { sendMessage } from '../_shared/telegram.ts'
+import { runAgent } from '../_shared/gemini.ts'
+import { NIXON_SYSTEM } from '../_shared/agents.ts'
+import { NIXON_TOOLS, executeNixonTool } from '../_shared/tools.ts'
+import { lisbonNow } from '../_shared/time.ts'
 
 export const HELP_CARD = `👋 Hi Nicole — Nixon here. Just talk to me.
 • "Remember: my lab logbook sheet is <link>"
@@ -9,12 +13,33 @@ export const HELP_CARD = `👋 Hi Nicole — Nixon here. Just talk to me.
 • "What's open for Ember?"
 Daily: 07:00 lesson → DONE → round-up → Helix → DONE → quiz → to-do · 12:00 · 18:00 · 22:00 close · 22:15 recap`
 
+const APOLOGY = 'Something broke on my side — try again in a minute.'
+
 type Update = {
   update_id?: number
   message?: { chat?: { id?: number | string }; text?: string }
 }
 
+// Supabase edge runtime exposes this; absent when running plain Deno.
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined
+
 const ok = (body = 'ok') => new Response(body, { status: 200 })
+
+export async function runNixon(chat: string, text: string): Promise<string> {
+  const now = lisbonNow()
+  const header = `[CHAT MESSAGE from Nicole | ${now.label} | today=${now.date} (${now.weekday})]`
+  const history = await loadHistory(chat, 30)
+  const reply = await runAgent({
+    system: NIXON_SYSTEM,
+    history,
+    userText: `${header}\n${text}`,
+    tools: NIXON_TOOLS,
+    execute: executeNixonTool,
+  })
+  await saveTurn(chat, 'user', text)
+  await saveTurn(chat, 'model', reply)
+  return reply
+}
 
 export async function handleUpdate(update: Update): Promise<void> {
   const chatId = update.message?.chat?.id
@@ -40,8 +65,13 @@ export async function handleUpdate(update: Update): Promise<void> {
     return
   }
 
-  // Phase 2: echo. Phase 3 replaces this with the Nixon agent.
-  await sendMessage(chat, text)
+  try {
+    const reply = await runNixon(chat, text)
+    await sendMessage(chat, reply)
+  } catch (err) {
+    console.error('nixon error', err)
+    await sendMessage(chat, APOLOGY).catch((e) => console.error('apology failed', e))
+  }
 }
 
 Deno.serve(async (req) => {
@@ -58,10 +88,11 @@ Deno.serve(async (req) => {
     return ok('bad json')
   }
 
-  try {
-    await handleUpdate(update)
-  } catch (err) {
-    console.error('telegram handler error', err)
+  const work = handleUpdate(update).catch((err) => console.error('telegram handler error', err))
+  if (typeof EdgeRuntime !== 'undefined' && EdgeRuntime) {
+    EdgeRuntime.waitUntil(work) // reply 200 now; Telegram won't re-deliver while Gemini thinks
+  } else {
+    await work
   }
   return ok()
 })

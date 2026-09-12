@@ -19,3 +19,25 @@ export async function setSetting(key: string, value: string): Promise<void> {
   const { error } = await db.from('settings').upsert({ key, value })
   if (error) throw error
 }
+
+// --- conversation memory ----------------------------------------------------
+export type HistoryTurn = { role: 'user' | 'model'; parts: { text: string }[] }
+
+/** Last `limit` messages for a chat, oldest first, in Gemini Content shape. */
+export async function loadHistory(chatId: string, limit = 30): Promise<HistoryTurn[]> {
+  const { data, error } = await db
+    .from('messages')
+    .select('role, content')
+    .eq('chat_id', chatId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return (data ?? [])
+    .reverse()
+    .map((m) => ({ role: m.role as 'user' | 'model', parts: [{ text: m.content as string }] }))
+}
+
+export async function saveTurn(chatId: string, role: 'user' | 'model', content: string): Promise<void> {
+  const { error } = await db.from('messages').insert({ chat_id: chatId, role, content })
+  if (error) throw error
+}
