@@ -3,6 +3,7 @@
 import type { FunctionDeclaration } from 'npm:@google/genai@2'
 import { runAgent, type ToolExecutor } from './gemini.ts'
 import { NATURE_SEARCH_TOOL, natureSearch } from './nature.ts'
+import { SHEET_READ_TOOL, executeGoogleTool } from './google.ts'
 import {
   CADENCE_SYSTEM,
   COMPASS_SYSTEM,
@@ -20,22 +21,28 @@ type Subagent = {
   execute: ToolExecutor
 }
 
-const noTools: ToolExecutor = (name) => Promise.resolve({ error: `no tool ${name} here` })
+// Every subagent may inspect the sheets whose ids Nixon passes in the request,
+// and nothing more. All writing stays with Nixon.
+const readOnly: ToolExecutor = async (name, args) => {
+  if (name === 'sheet_read') return await executeGoogleTool(name, args)
+  return { error: `no tool ${name} here — ask Nixon to do it` }
+}
 
 const helixTools: ToolExecutor = async (name, args) => {
   if (name === 'nature_search') return await natureSearch(String(args.query ?? ''))
-  return { error: `no tool ${name} here` }
+  return await readOnly(name, args)
 }
 
+const READ = [SHEET_READ_TOOL]
+
 export const SUBAGENTS: Record<SubagentName, Subagent> = {
-  // Helix is the only one that reads the literature; the rest work from what
-  // Nixon hands them until Phase 5 gives them sheet_read.
-  helix: { system: HELIX_SYSTEM, tools: [NATURE_SEARCH_TOOL], execute: helixTools },
-  cadence: { system: CADENCE_SYSTEM, tools: [], execute: noTools },
-  compass: { system: COMPASS_SYSTEM, tools: [], execute: noTools },
-  ember: { system: EMBER_SYSTEM, tools: [], execute: noTools },
-  ledger: { system: LEDGER_SYSTEM, tools: [], execute: noTools },
-  forge: { system: FORGE_SYSTEM, tools: [], execute: noTools },
+  // Helix is the only one that also reads the literature.
+  helix: { system: HELIX_SYSTEM, tools: [NATURE_SEARCH_TOOL, SHEET_READ_TOOL], execute: helixTools },
+  cadence: { system: CADENCE_SYSTEM, tools: READ, execute: readOnly },
+  compass: { system: COMPASS_SYSTEM, tools: READ, execute: readOnly },
+  ember: { system: EMBER_SYSTEM, tools: READ, execute: readOnly },
+  ledger: { system: LEDGER_SYSTEM, tools: READ, execute: readOnly },
+  forge: { system: FORGE_SYSTEM, tools: READ, execute: readOnly },
 }
 
 export function isSubagent(name: string): name is SubagentName {

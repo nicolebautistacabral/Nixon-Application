@@ -4,6 +4,7 @@ import { db } from './db.ts'
 import type { ToolExecutor } from './gemini.ts'
 import { runSubagent } from './subagents.ts'
 import type { LisbonNow } from './time.ts'
+import { GOOGLE_TOOLS, GOOGLE_TOOL_NAMES, executeGoogleTool } from './google.ts'
 
 const AGENTS = ['nixon', 'helix', 'cadence', 'compass', 'ember', 'ledger', 'forge']
 const STATUSES = ['open', 'in_progress', 'done']
@@ -13,7 +14,7 @@ const KINDS = ['instruction', 'id', 'preference', 'fact']
 const str = (description: string) => ({ type: Type.STRING, description })
 const int = (description: string) => ({ type: Type.INTEGER, description })
 
-export const NIXON_TOOLS: FunctionDeclaration[] = [
+const DB_TOOLS: FunctionDeclaration[] = [
   {
     name: 'read_tasks',
     description: 'List tasks. Omit filters for everything. Sorted by deadline (nulls last).',
@@ -171,7 +172,12 @@ export async function buildHeader(kind: string, now: LisbonNow): Promise<string>
   ].join('\n')
 }
 
+/** Nixon does every write: the database, plus Calendar, Sheets, Docs and
+ *  outbound Telegram. Subagents only read. */
+export const NIXON_TOOLS: FunctionDeclaration[] = [...DB_TOOLS, ...GOOGLE_TOOLS]
+
 export const executeNixonTool: ToolExecutor = async (name, a) => {
+  if (GOOGLE_TOOL_NAMES.has(name)) return await executeGoogleTool(name, a)
   switch (name) {
     case 'read_tasks': {
       let q = db.from('tasks').select('*').order('deadline', { ascending: true, nullsFirst: false })

@@ -2,7 +2,7 @@
   "name": "nixon",
   "private": true,
   "version": "0.1.0",
-  "description": "Nixon — Telegram personal-assistant agent on Supabase Edge Functions + Gemini",
+  "description": "Nixon \u2014 Telegram personal-assistant agent on Supabase Edge Functions + Gemini",
   "scripts": {
     "supabase": "supabase",
     "link": "supabase link",
@@ -11,7 +11,8 @@
     "deploy:pulse": "supabase functions deploy pulse --no-verify-jwt",
     "deploy": "npm run deploy:telegram && npm run deploy:pulse",
     "logs:telegram": "supabase functions logs telegram",
-    "logs:pulse": "supabase functions logs pulse"
+    "logs:pulse": "supabase functions logs pulse",
+    "test": "deno run -A --no-check supabase/functions/_tests/run-all.ts"
   },
   "devDependencies": {
     "supabase": "^2.117.0"
