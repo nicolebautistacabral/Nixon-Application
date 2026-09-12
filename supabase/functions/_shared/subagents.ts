@@ -53,6 +53,7 @@ export async function runSubagent(agent: string, request: string): Promise<strin
     userText: request,
     tools,
     execute,
+    role: 'author', // lessons are the part worth spending the capable model on
     maxSteps: 8, // subagents only loop for nature_search
   })
 }

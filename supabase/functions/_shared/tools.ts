@@ -3,6 +3,7 @@ import { Type, type FunctionDeclaration } from 'npm:@google/genai@2'
 import { db } from './db.ts'
 import type { ToolExecutor } from './gemini.ts'
 import { runSubagent } from './subagents.ts'
+import type { LisbonNow } from './time.ts'
 
 const AGENTS = ['nixon', 'helix', 'cadence', 'compass', 'ember', 'ledger', 'forge']
 const STATUSES = ['open', 'in_progress', 'done']
@@ -137,6 +138,37 @@ export const NIXON_TOOLS: FunctionDeclaration[] = [
 
 function fail(error: unknown): never {
   throw error instanceof Error ? error : new Error(String(error))
+}
+
+/** Message header carrying the two reads Nixon would otherwise spend requests on.
+ *  `kind` is "CHAT MESSAGE from Nicole" or "SCHEDULED PULSE <mode>". */
+export async function buildHeader(kind: string, now: LisbonNow): Promise<string> {
+  const [memory, state] = await Promise.all([
+    db.from('memory').select('key, value, kind').order('key'),
+    db.from('daily_state').select('*').eq('date', now.date).maybeSingle(),
+  ])
+
+  const memoryLines = (memory.data ?? []).map((m) => `${m.key} [${m.kind}] = ${m.value}`)
+  const memoryBlock = memory.error
+    ? `(memory unavailable: ${memory.error.message} — call read_memory yourself)`
+    : memoryLines.length
+    ? memoryLines.join('\n')
+    : '(empty — she has not told you anything to remember yet)'
+
+  const stateBlock = state.error
+    ? `(state unavailable: ${state.error.message} — call read_state yourself)`
+    : state.data
+    ? JSON.stringify(state.data)
+    : `(no row for ${now.date} yet — today has not started)`
+
+  return [
+    `[${kind} | ${now.label} | today=${now.date} (${now.weekday})]`,
+    `MEMORY:`,
+    memoryBlock,
+    `TODAY'S STATE (${now.date}):`,
+    stateBlock,
+    `---`,
+  ].join('\n')
 }
 
 export const executeNixonTool: ToolExecutor = async (name, a) => {

@@ -39,7 +39,11 @@ export async function natureSearch(query: string): Promise<Paper[] | { error: st
     `&format=json&pageSize=6&resultType=lite&sort=${encodeURIComponent('CITED desc')}`
 
   try {
-    const res = await fetch(url, { headers: { Accept: 'application/json' } })
+    // Hard timeout: a hanging search must never hold the whole lesson open.
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(12_000),
+    })
     if (!res.ok) return { error: `europepmc ${res.status}` }
 
     const body = await res.json()

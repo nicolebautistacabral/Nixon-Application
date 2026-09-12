@@ -2,8 +2,8 @@
 import { getSetting, loadHistory, saveTurn, setSetting } from '../_shared/db.ts'
 import { sendMessage } from '../_shared/telegram.ts'
 import { runAgent } from '../_shared/gemini.ts'
-import { NIXON_SYSTEM } from '../_shared/agents.ts'
-import { NIXON_TOOLS, executeNixonTool } from '../_shared/tools.ts'
+import { NIXON_PREFETCH_ADDENDUM, NIXON_SYSTEM } from '../_shared/agents.ts'
+import { NIXON_TOOLS, buildHeader, executeNixonTool } from '../_shared/tools.ts'
 import { lisbonNow } from '../_shared/time.ts'
 
 export const HELP_CARD = `👋 Hi Nicole — Nixon here. Just talk to me.
@@ -27,14 +27,20 @@ const ok = (body = 'ok') => new Response(body, { status: 200 })
 
 export async function runNixon(chat: string, text: string): Promise<string> {
   const now = lisbonNow()
-  const header = `[CHAT MESSAGE from Nicole | ${now.label} | today=${now.date} (${now.weekday})]`
-  const history = await loadHistory(chat, 30)
+  // Memory and state come from Postgres, not from the model asking for them:
+  // two fewer Gemini requests on every message, out of a daily budget of a few
+  // dozen. Both reads run alongside the history load.
+  const [history, header] = await Promise.all([
+    loadHistory(chat, 30),
+    buildHeader(`CHAT MESSAGE from Nicole`, now),
+  ])
   const reply = await runAgent({
-    system: NIXON_SYSTEM,
+    system: NIXON_SYSTEM + NIXON_PREFETCH_ADDENDUM,
     history,
     userText: `${header}\n${text}`,
     tools: NIXON_TOOLS,
     execute: executeNixonTool,
+    role: 'coordinator',
   })
   await saveTurn(chat, 'user', text)
   await saveTurn(chat, 'model', reply)
