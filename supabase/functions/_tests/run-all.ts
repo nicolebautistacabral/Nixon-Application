@@ -1,12 +1,12 @@
 // Runs every Nixon test suite in one go: deno run -A supabase/functions/_tests/run-all.ts
-const suites = ['phase3_test', 'phase4_test', 'phase4b_test', 'phase4c_test', 'phase5_test']
+const suites = ['phase3_test', 'phase4_test', 'phase4b_test', 'phase4c_test', 'phase5_test', 'phase6_test']
 let bad = 0
 for (const s of suites) {
   const cmd = new Deno.Command(Deno.execPath(), {
     args: ['run', '-A', '--no-check', new URL(`./${s}.ts`, import.meta.url).pathname],
     env: {
       SUPABASE_URL: 'http://sb.local', SUPABASE_SERVICE_ROLE_KEY: 'svc',
-      TELEGRAM_BOT_TOKEN: 'tok', TELEGRAM_WEBHOOK_SECRET: 'sec', GEMINI_API_KEY: 'g',
+      TELEGRAM_BOT_TOKEN: 'tok', TELEGRAM_WEBHOOK_SECRET: 'sec', GEMINI_API_KEY: 'g', NIXON_CRON_SECRET: 'cron',
     },
     stdout: 'piped', stderr: 'piped',
   })

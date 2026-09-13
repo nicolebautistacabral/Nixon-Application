@@ -1,10 +1,7 @@
 // Telegram webhook: verify secret → /start or run Nixon → always 200 fast.
-import { getSetting, loadHistory, saveTurn, setSetting } from '../_shared/db.ts'
+import { getSetting, setSetting } from '../_shared/db.ts'
 import { sendMessage } from '../_shared/telegram.ts'
-import { runAgent } from '../_shared/gemini.ts'
-import { NIXON_PREFETCH_ADDENDUM, NIXON_SYSTEM } from '../_shared/agents.ts'
-import { NIXON_TOOLS, buildHeader, executeNixonTool } from '../_shared/tools.ts'
-import { lisbonNow } from '../_shared/time.ts'
+import { runNixon } from '../_shared/nixon.ts'
 
 export const HELP_CARD = `👋 Hi Nicole — Nixon here. Just talk to me.
 • "Remember: my lab logbook sheet is <link>"
@@ -24,28 +21,6 @@ type Update = {
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined
 
 const ok = (body = 'ok') => new Response(body, { status: 200 })
-
-export async function runNixon(chat: string, text: string): Promise<string> {
-  const now = lisbonNow()
-  // Memory and state come from Postgres, not from the model asking for them:
-  // two fewer Gemini requests on every message, out of a daily budget of a few
-  // dozen. Both reads run alongside the history load.
-  const [history, header] = await Promise.all([
-    loadHistory(chat, 30),
-    buildHeader(`CHAT MESSAGE from Nicole`, now),
-  ])
-  const reply = await runAgent({
-    system: NIXON_SYSTEM + NIXON_PREFETCH_ADDENDUM,
-    history,
-    userText: `${header}\n${text}`,
-    tools: NIXON_TOOLS,
-    execute: executeNixonTool,
-    role: 'coordinator',
-  })
-  await saveTurn(chat, 'user', text)
-  await saveTurn(chat, 'model', reply)
-  return reply
-}
 
 export async function handleUpdate(update: Update): Promise<void> {
   const chatId = update.message?.chat?.id
@@ -72,7 +47,7 @@ export async function handleUpdate(update: Update): Promise<void> {
   }
 
   try {
-    const reply = await runNixon(chat, text)
+    const reply = await runNixon(chat, 'CHAT MESSAGE from Nicole', text)
     await sendMessage(chat, reply)
   } catch (err) {
     console.error('nixon error', err)
