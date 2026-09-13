@@ -108,14 +108,18 @@ check(geminiCalls[0].system.startsWith('You are HELIX'), 'HELIX system prompt us
 check(geminiCalls[0].tools.includes('nature_search'), 'helix given nature_search')
 check(geminiCalls[0].text === '5-layer rabbit hole lesson on coffee', 'request passed verbatim, no history')
 
-console.log('\n4. delegate → cadence gets read-only tools')
+console.log('\n4. delegate → cadence gets the read-only set')
 script = [{ text: '🎭 1. Shakespeare → today…' }]
 turn = 0
 geminiCalls.length = 0
 const cadOut = await executeNixonTool('delegate', { agent: 'cadence', request: 'morning lesson | cadence_day=1 | theme=Groceries' })
 check(String(cadOut).includes('🎭'), 'cadence answer returned')
 check(geminiCalls[0].system.startsWith('You are CADENCE'), 'CADENCE system prompt used')
-check(geminiCalls[0].tools.join() === 'sheet_read', `cadence given sheet_read and nothing else — ${geminiCalls[0].tools.join() || 'none'}`)
+check(
+  ['drive_list', 'sheet_read', 'doc_read'].every((n) => geminiCalls[0].tools.includes(n)) &&
+    !geminiCalls[0].tools.some((n: string) => ['sheet_append_row', 'doc_append', 'calendar_create'].includes(n)),
+  `cadence given the read set and no writes — ${geminiCalls[0].tools.join() || 'none'}`,
+)
 
 console.log('\n5. all six wired, bad name handled')
 check(Object.keys(SUBAGENTS).length === 6, `six subagents — got ${Object.keys(SUBAGENTS).length}`)

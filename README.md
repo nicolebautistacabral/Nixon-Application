@@ -116,7 +116,27 @@ curl.exe "https://<ref>.supabase.co/functions/v1/pulse?selftest=google" -H "x-ni
 
 It checks each layer in order and names the exact remedy for whatever is wrong.
 
-### 5. Schedule the daily pulses
+### 5. Drive folders, one per agent
+
+Keep a parent folder in your Drive with a sub-folder named after each agent —
+`Helix`, `Cadence`, `Compass`, `Ember`, `Ledger`, `Forge` — and put that agent's
+sheets and docs inside.
+
+1. In Google Cloud enable the **Google Drive API**.
+2. Share the parent folder with the service-account email as **Editor**. Sharing
+   the parent covers everything inside it, including files you add later.
+3. Tell Nixon once, in Telegram:
+   `Remember: my Nixon drive folder is <link to the parent folder>`
+
+From then on each subagent is handed its own folder id automatically. It can
+list what is in there and read any sheet or doc without you registering files
+one at a time. The sub-folders are matched by name and remembered, so only that
+one link ever needs registering.
+
+Subagents can look but not touch: `drive_list`, `sheet_read` and `doc_read` only.
+Every write stays with Nixon.
+
+### 6. Schedule the daily pulses
 
 ```powershell
 (Get-Content supabase\migrations\0002_cron.sql -Raw).Replace('PUT_YOUR_CRON_SECRET_HERE', $cr) | Set-Content cron-ready.sql
@@ -135,19 +155,17 @@ select jobname, schedule, active from cron.job;
 
 ## Register your files
 
-Send these once, in Telegram, in your own words. Nixon stores them and uses them
-from then on.
+With the Drive folders set up above, one message covers all of them:
 
 ```
-Remember: my lab logbook sheet is <link>
-Remember: my biomedicine classes sheet is <link>
+Remember: my Nixon drive folder is <link to the parent folder>
+```
+
+Register anything that lives outside those folders individually, plus any
+standing orders:
+
+```
 Remember: my competitions sheet is <link>
-Remember: my manuscripts doc is <link>
-Remember: my social performance sheet is <link>
-Remember: my content planning sheet is <link>
-Remember: my student matrix sheet is <link>
-Remember: my lesson planning doc is <link>
-Remember: my sales sheet is <link>
 Remember: I always want confirmation before you send anything to a student
 ```
 

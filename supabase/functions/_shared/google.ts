@@ -10,6 +10,9 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar',
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/documents',
+  // Read-only: listing what is in an agent's folder. Nixon never needs to
+  // create or delete files in Drive, so it does not ask for permission to.
+  'https://www.googleapis.com/auth/drive.readonly',
 ].join(' ')
 
 type ServiceAccount = { client_email: string; private_key: string }
@@ -141,10 +144,11 @@ async function googleFetch(url: string, init: RequestInit = {}): Promise<unknown
   return text ? JSON.parse(text) : {}
 }
 
-/** Nicole pastes links, not IDs. Accept either. */
+/** Nicole pastes links, not IDs. Accept either, for sheets, docs and folders. */
 export function extractId(input: string): string {
   const s = String(input).trim()
-  const m = s.match(/\/(?:spreadsheets|document)\/d\/([a-zA-Z0-9-_]+)/) ??
+  const m = s.match(/\/(?:spreadsheets|document|presentation|file)\/d\/([a-zA-Z0-9-_]+)/) ??
+    s.match(/\/folders\/([a-zA-Z0-9-_]+)/) ??
     s.match(/[?&]id=([a-zA-Z0-9-_]+)/)
   return m ? m[1] : s
 }
@@ -219,6 +223,27 @@ export const GOOGLE_TOOLS: FunctionDeclaration[] = [
     },
   },
   {
+    name: 'drive_list',
+    description:
+      "List the Google Docs, Sheets and sub-folders inside a Drive folder. Use it to find a file when you do not already have its id, and to see what Nicole has added since.",
+    parameters: {
+      type: Type.OBJECT,
+      required: ['folder_id'],
+      properties: {
+        folder_id: str('Folder id or full Drive URL'),
+      },
+    },
+  },
+  {
+    name: 'doc_read',
+    description: 'Read the full text of a Google Doc.',
+    parameters: {
+      type: Type.OBJECT,
+      required: ['document_id'],
+      properties: { document_id: str('Doc id or full URL') },
+    },
+  },
+  {
     name: 'telegram_send',
     description:
       "Send a Telegram message to someone other than Nicole, e.g. a student's group chat. Only after Nicole has confirmed the wording.",
@@ -233,8 +258,17 @@ export const GOOGLE_TOOLS: FunctionDeclaration[] = [
   },
 ]
 
-/** sheet_read alone, for the subagents: they may look, never write. */
-export const SHEET_READ_TOOL = GOOGLE_TOOLS.find((t) => t.name === 'sheet_read')!
+const pick = (name: string) => GOOGLE_TOOLS.find((t) => t.name === name)!
+
+/** What a subagent may do: look at its own folder and read what is in it.
+ *  Every write stays with Nixon. */
+export const SUBAGENT_READ_TOOLS: FunctionDeclaration[] = [
+  pick('drive_list'), pick('sheet_read'), pick('doc_read'),
+]
+export const SUBAGENT_READ_NAMES = new Set(SUBAGENT_READ_TOOLS.map((t) => t.name))
+
+/** @deprecated kept so older imports still resolve */
+export const SHEET_READ_TOOL = pick('sheet_read')
 
 // ---------------------------------------------------------------- executors
 export const executeGoogleTool: ToolExecutor = async (name, a) => {
@@ -303,6 +337,61 @@ export const executeGoogleTool: ToolExecutor = async (name, a) => {
         }),
       })
       return { appended: true, chars: String(a.text ?? '').length }
+    }
+
+    case 'drive_list': {
+      const id = extractId(String(a.folder_id))
+      const qs = new URLSearchParams({
+        q: `'${id}' in parents and trashed = false`,
+        fields: 'files(id,name,mimeType,modifiedTime)',
+        orderBy: 'folder,name',
+        pageSize: '100',
+        supportsAllDrives: 'true',
+        includeItemsFromAllDrives: 'true',
+      })
+      const res = await googleFetch(`https://www.googleapis.com/drive/v3/files?${qs}`) as {
+        files?: { id: string; name: string; mimeType: string; modifiedTime?: string }[]
+      }
+      // Plain kinds, so an agent does not have to know Google's mime strings.
+      const kindOf = (m: string) =>
+        m === 'application/vnd.google-apps.folder' ? 'folder'
+          : m === 'application/vnd.google-apps.spreadsheet' ? 'sheet'
+          : m === 'application/vnd.google-apps.document' ? 'doc'
+          : 'other'
+      return (res.files ?? []).map((f) => ({
+        id: f.id, name: f.name, kind: kindOf(f.mimeType), modified: f.modifiedTime,
+      }))
+    }
+
+    case 'doc_read': {
+      const id = extractId(String(a.document_id))
+      const doc = await googleFetch(`https://docs.googleapis.com/v1/documents/${id}`) as {
+        title?: string
+        body?: { content?: Record<string, unknown>[] }
+      }
+      // Flatten the paragraph tree into plain text.
+      const out: string[] = []
+      const walk = (nodes: Record<string, unknown>[] | undefined) => {
+        for (const n of nodes ?? []) {
+          const para = n.paragraph as { elements?: { textRun?: { content?: string } }[] } | undefined
+          if (para?.elements) {
+            for (const el of para.elements) if (el.textRun?.content) out.push(el.textRun.content)
+          }
+          const table = n.table as { tableRows?: { tableCells?: { content?: Record<string, unknown>[] }[] }[] } | undefined
+          for (const row of table?.tableRows ?? []) {
+            for (const cell of row.tableCells ?? []) walk(cell.content)
+          }
+        }
+      }
+      walk(doc.body?.content)
+      const text = out.join('').trim()
+      // Docs can be long and the model's context is not free.
+      const LIMIT = 20000
+      return {
+        title: doc.title ?? '',
+        text: text.length > LIMIT ? text.slice(0, LIMIT) + '\n\n[…truncated]' : text,
+        truncated: text.length > LIMIT,
+      }
     }
 
     case 'telegram_send': {
