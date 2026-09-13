@@ -1,5 +1,5 @@
 // Runs every Nixon test suite in one go: deno run -A supabase/functions/_tests/run-all.ts
-const suites = ['phase3_test', 'phase4_test', 'phase4b_test', 'phase4c_test', 'phase5_test', 'phase6_test']
+const suites = ['phase3_test', 'phase4_test', 'phase4b_test', 'phase4c_test', 'phase5_test', 'phase6_test', 'phase6b_test']
 let bad = 0
 for (const s of suites) {
   const cmd = new Deno.Command(Deno.execPath(), {

@@ -56,13 +56,81 @@ export async function runPulse(mode: Mode, now: LisbonNow, force: boolean): Prom
   return `${mode} sent`
 }
 
+/**
+ * Checks the Google setup one layer at a time and says which layer broke.
+ * Google's own errors do not distinguish "API not enabled" from "calendar not
+ * shared", and both are easy to miss in a 14-step setup. Costs no model quota.
+ */
+export async function googleSelfTest(now: LisbonNow): Promise<string> {
+  const lines: string[] = []
+  const { executeGoogleTool } = await import('../_shared/google.ts')
+
+  const sa = Deno.env.get('GOOGLE_SA_JSON')
+  lines.push(sa ? `1. GOOGLE_SA_JSON is set (${sa.length} chars)` : '1. FAIL GOOGLE_SA_JSON is not set')
+  if (!sa) return lines.join('\n')
+
+  let email = '(unreadable)'
+  try {
+    let t = sa.trim()
+    if (!t.startsWith('{')) t = atob(t.replace(/\s+/g, ''))
+    email = JSON.parse(t).client_email ?? '(missing client_email)'
+    lines.push(`2. service account = ${email}`)
+  } catch (err) {
+    lines.push(`2. FAIL could not read the key: ${err instanceof Error ? err.message : err}`)
+    return lines.join('\n')
+  }
+
+  lines.push(`3. GOOGLE_CALENDAR_ID = ${Deno.env.get('GOOGLE_CALENDAR_ID') ?? '(not set — using "primary", which for a robot means its own empty calendar)'}`)
+
+  try {
+    const today = await executeGoogleTool('calendar_list', {
+      time_min_iso: `${now.date}T00:00:00`,
+      time_max_iso: `${now.date}T23:59:59`,
+    }) as unknown[]
+    lines.push(`4. reading the calendar works (${today.length} events today)`)
+  } catch (err) {
+    const m = err instanceof Error ? err.message : String(err)
+    lines.push(`4. FAIL cannot read the calendar: ${m}`)
+    lines.push(
+      /403|404/.test(m)
+        ? `   → share the calendar with ${email} as "Make changes to events", and enable the Google Calendar API in the project`
+        : `   → check the key and the calendar id`,
+    )
+    return lines.join('\n')
+  }
+
+  try {
+    const ev = await executeGoogleTool('calendar_create', {
+      title: 'Nixon self-test — safe to delete',
+      start_iso: `${now.date}T23:30:00`,
+      end_iso: `${now.date}T23:45:00`,
+      description: 'Created by the Nixon self-test. Delete me.',
+    }) as Record<string, unknown>
+    lines.push(`5. writing to the calendar works → ${ev.htmlLink}`)
+    lines.push('   Everything is connected. Delete that test event when you see it.')
+  } catch (err) {
+    const m = err instanceof Error ? err.message : String(err)
+    lines.push(`5. FAIL cannot create events: ${m}`)
+    lines.push(`   → the sharing permission must be "Make changes to events", not "See all event details"`)
+  }
+  return lines.join('\n')
+}
+
 Deno.serve(async (req) => {
   const expected = Deno.env.get('NIXON_CRON_SECRET')
   const given = req.headers.get('x-nixon-secret')
   if (!expected || given !== expected) return new Response('forbidden', { status: 403 })
 
   const now = lisbonNow()
-  const forced = new URL(req.url).searchParams.get('force')
+  const params = new URL(req.url).searchParams
+
+  if (params.get('selftest') === 'google') {
+    const report = await googleSelfTest(now).catch((e) => `self-test crashed: ${e}`)
+    console.log(report)
+    return new Response(report, { status: 200, headers: { 'Content-Type': 'text/plain' } })
+  }
+
+  const forced = params.get('force')
 
   if (forced && !isMode(forced)) {
     return new Response(`unknown mode ${forced}. Try one of: ${MODES.join(', ')}`, { status: 400 })
