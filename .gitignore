@@ -5,6 +5,11 @@
 *.pem
 *-service-account*.json
 firebase-adminsdk-*.json
+# Google service-account keys download under many names. Ignore the lot.
+key.json
+*key.json
+gcp-*.json
+*-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json
 
 # Dependencies
 node_modules/
