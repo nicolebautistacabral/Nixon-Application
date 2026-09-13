@@ -80,7 +80,16 @@ export async function googleSelfTest(now: LisbonNow): Promise<string> {
     return lines.join('\n')
   }
 
-  lines.push(`3. GOOGLE_CALENDAR_ID = ${Deno.env.get('GOOGLE_CALENDAR_ID') ?? '(not set — using "primary", which for a robot means its own empty calendar)'}`)
+  const calId = Deno.env.get('GOOGLE_CALENDAR_ID')
+  lines.push(`3. GOOGLE_CALENDAR_ID = ${calId ?? '(not set — using "primary", which for a robot means its own empty calendar)'}`)
+  if (calId && calId === email) {
+    lines.push(
+      `   → WRONG: that is the robot's own address. Events would go to its private calendar,`,
+    )
+    lines.push(
+      `     which you cannot see. Set it to your own Gmail address instead.`,
+    )
+  }
 
   try {
     const today = await executeGoogleTool('calendar_list', {
@@ -91,11 +100,18 @@ export async function googleSelfTest(now: LisbonNow): Promise<string> {
   } catch (err) {
     const m = err instanceof Error ? err.message : String(err)
     lines.push(`4. FAIL cannot read the calendar: ${m}`)
-    lines.push(
-      /403|404/.test(m)
-        ? `   → share the calendar with ${email} as "Make changes to events", and enable the Google Calendar API in the project`
-        : `   → check the key and the calendar id`,
-    )
+    if (/Invalid JWT Signature|invalid_grant/i.test(m)) {
+      // The key parsed fine, so the bytes are intact; Google is rejecting the
+      // signature. That means the key it was signed with is no longer valid.
+      lines.push(`   → Google does not recognise this key. Almost always it was deleted or`)
+      lines.push(`     replaced in the console. Download a new JSON key for ${email}`)
+      lines.push(`     and set GOOGLE_SA_JSON again from that file.`)
+    } else if (/403|404|has not been used|disabled/i.test(m)) {
+      lines.push(`   → share the calendar with ${email} as "Make changes to events",`)
+      lines.push(`     and enable the Google Calendar API in the project`)
+    } else {
+      lines.push(`   → check the key and the calendar id`)
+    }
     return lines.join('\n')
   }
 

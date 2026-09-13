@@ -10,6 +10,7 @@ const check = (c: unknown, l: string) => {
 
 let listStatus = 200
 let createStatus = 200
+let tokenOk = true
 
 globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
@@ -17,7 +18,13 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   const json = (v: unknown, s = 200) =>
     new Response(JSON.stringify(v), { status: s, headers: { 'Content-Type': 'application/json' } })
 
-  if (url === 'https://oauth2.googleapis.com/token') return json({ access_token: 'tok', expires_in: 3600 })
+  if (url === 'https://oauth2.googleapis.com/token') {
+    if (!tokenOk) {
+      // Exactly what Google returns once a service-account key is deleted.
+      return json({ error: 'invalid_grant', error_description: 'Invalid JWT Signature.' }, 400)
+    }
+    return json({ access_token: 'tok', expires_in: 3600 })
+  }
   if (url.includes('/calendar/v3/') && method === 'POST') {
     if (createStatus !== 200) {
       return new Response(JSON.stringify({ error: { message: 'forbidden for non-organizer' } }), { status: createStatus })
@@ -101,7 +108,24 @@ check(r.includes('4. reading the calendar works'), 'read still reported as fine'
 check(r.includes('5. FAIL'), 'write reported as the failure')
 check(r.includes('Make changes to events'), 'names the exact permission level to pick')
 
-console.log('\n7. calendar id not set')
+console.log('\n7. the key was deleted in the console (Nicole\'s actual failure)')
+listStatus = 200; createStatus = 200; tokenOk = false
+r = await run()
+check(r.includes('4. FAIL'), 'fails at the first call that needs a token')
+check(r.includes('does not recognise this key'), 'explains what invalid_grant means in plain words')
+check(r.includes('deleted or'), 'names the likely cause')
+check(r.includes('Download a new JSON key'), 'says what to do about it')
+check(!r.includes('share the calendar'), 'does not send her chasing the wrong problem')
+tokenOk = true
+
+console.log('\n8. calendar id set to the robot itself (Nicole\'s second mistake)')
+Deno.env.set('GOOGLE_CALENDAR_ID', KEY.client_email)
+r = await run()
+check(r.includes('WRONG: that is the robot'), 'catches it')
+check(r.includes('your own Gmail address'), 'says what it should be')
+Deno.env.set('GOOGLE_CALENDAR_ID', 'nicole@gmail.com')
+
+console.log('\n9. calendar id not set')
 Deno.env.delete('GOOGLE_CALENDAR_ID')
 listStatus = 200; createStatus = 200
 r = await run()
