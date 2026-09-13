@@ -1,7 +1,7 @@
 // Cron target. pg_cron calls this every hour at :00 and :15; this function
 // decides from Lisbon time whether anything is due, which keeps the schedule
 // correct across daylight saving without touching the cron entries.
-import { getSetting, setSetting } from '../_shared/db.ts'
+import { getSetting, pruneProcessedUpdates, setSetting, trimMessages } from '../_shared/db.ts'
 import { sendMessage } from '../_shared/telegram.ts'
 import { runNixon } from '../_shared/nixon.ts'
 import { lisbonNow, type LisbonNow } from '../_shared/time.ts'
@@ -53,6 +53,19 @@ export async function runPulse(mode: Mode, now: LisbonNow, force: boolean): Prom
   const reply = await runNixon(chat, `SCHEDULED PULSE ${mode}`, TASK[mode], `[${mode}]`)
   await sendMessage(chat, reply)
   await setSetting(alreadyKey, now.date)
+
+  // Housekeeping rides on the day-close pulse: it is the one moment nothing
+  // else is happening, and it runs after Nicole has her message.
+  if (mode === 'pulse_2200_close') {
+    try {
+      const trimmed = await trimMessages(chat, 200)
+      await pruneProcessedUpdates(7)
+      if (trimmed) console.log(`trimmed ${trimmed} old messages`)
+    } catch (err) {
+      console.error('nightly cleanup failed', err) // never worth failing the pulse
+    }
+  }
+
   return `${mode} sent`
 }
 

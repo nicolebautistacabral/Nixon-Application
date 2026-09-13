@@ -1,5 +1,5 @@
 // Telegram webhook: verify secret → /start or run Nixon → always 200 fast.
-import { getSetting, setSetting } from '../_shared/db.ts'
+import { claimUpdate, getSetting, setSetting } from '../_shared/db.ts'
 import { sendMessage } from '../_shared/telegram.ts'
 import { runNixon } from '../_shared/nixon.ts'
 
@@ -26,6 +26,11 @@ export async function handleUpdate(update: Update): Promise<void> {
   const chatId = update.message?.chat?.id
   const text = update.message?.text?.trim()
   if (chatId === undefined || !text) return // stickers, edits, joins… ignore
+
+  if (update.update_id !== undefined && !(await claimUpdate(update.update_id))) {
+    console.log(`update ${update.update_id} already handled, skipping`)
+    return
+  }
 
   const chat = String(chatId)
   const owner = await getSetting('owner_chat_id')
