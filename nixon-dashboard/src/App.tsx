@@ -1,40 +1,68 @@
-import { useEffect, useState } from 'react'
-import { supabase } from './lib/supabase'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { AuthProvider } from './context/AuthContext'
+import RequireAuth from './components/RequireAuth'
+import Layout from './components/Layout'
+import ShaderBackground from './components/ShaderBackground'
+import Home from './screens/Home'
+import Tasks from './screens/Tasks'
+import Asks from './screens/Asks'
+import Chat from './screens/Chat'
+import Settings from './screens/Settings'
+import AgentDetail from './screens/AgentDetail'
+import { getAllTasks, getToday } from './lib/queries'
+import { useLive } from './hooks/useLive'
+import { asksFrom } from './lib/phase'
+import { configError } from './lib/supabase'
+import type { DailyState, Task } from './types/db'
 
-type Status = 'checking' | 'connected' | 'error'
-
-// Phase 1 smoke screen. Replaced by the real shell in Phase 4.
-export default function App() {
-  const [status, setStatus] = useState<Status>('checking')
-  const [detail, setDetail] = useState('')
-
-  useEffect(() => {
-    supabase
-      .from('settings')
-      .select('key', { count: 'exact', head: true })
-      .then(({ error, count }) => {
-        if (error) {
-          // With RLS on and no policies, the anon key gets an empty result, not
-          // an error — so any error here is a URL/key/network problem.
-          setStatus('error')
-          setDetail(error.message)
-        } else {
-          setStatus('connected')
-          setDetail(`settings rows visible to anon: ${count ?? 0}`)
-        }
-      })
-  }, [])
+function Shell() {
+  // One read, shared with the nav, so the Asks dot is live everywhere.
+  const tasks = useLive<Task[]>('tasks', getAllTasks, [])
+  const state = useLive<DailyState | null>('daily_state', getToday, null)
+  const waiting = asksFrom(state.data, tasks.data).length > 0
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center gap-4 px-4 text-center">
-      <p className="font-sans text-xs uppercase tracking-[0.2em]">✿ Nicole's Polymath Assistant ✿</p>
-      <h1 className="font-cursive text-7xl drop-shadow-lg">Nixon</h1>
-      <p className="font-sans text-sm">
-        Supabase: {status === 'checking' && 'checking…'}
-        {status === 'connected' && '✅ connected'}
-        {status === 'error' && '❌ not connected'}
-      </p>
-      {detail && <p className="font-sans text-xs opacity-80">{detail}</p>}
+    <Layout asksWaiting={waiting}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/tasks" element={<Tasks />} />
+        <Route path="/asks" element={<Asks />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/agent/:name" element={<AgentDetail />} />
+        <Route path="*" element={<Home />} />
+      </Routes>
+    </Layout>
+  )
+}
+
+/** A build with no Supabase credentials must say so, not show a blank screen. */
+function NotConfigured({ message }: { message: string }) {
+  return (
+    <main className="grid min-h-screen place-items-center px-5 text-center">
+      <div className="max-w-md rounded-2xl border border-white/30 bg-white/15 p-6 backdrop-blur-md">
+        <h1 className="font-cursive text-4xl">Nixon</h1>
+        <p className="mt-3 font-semibold">Not configured yet</p>
+        <p className="mt-2 text-sm opacity-90">{message}</p>
+      </div>
     </main>
+  )
+}
+
+export default function App() {
+  if (configError) {
+    return (
+      <>
+        <ShaderBackground />
+        <div className="relative z-10"><NotConfigured message={configError} /></div>
+      </>
+    )
+  }
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <RequireAuth><Shell /></RequireAuth>
+      </AuthProvider>
+    </BrowserRouter>
   )
 }

@@ -21,3 +21,65 @@ body {
   background: linear-gradient(135deg, #0ea5e9, #6366f1, #a855f7, #ec4899);
   background-attachment: fixed;
 }
+
+/* ---------------------------------------------------------------- background */
+.nixon-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  background: linear-gradient(135deg, #0ea5e9, #6366f1 38%, #a855f7 68%, #ec4899);
+}
+
+.nixon-blob {
+  position: absolute;
+  width: 90vmax;
+  height: 90vmax;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.55;
+  will-change: transform;
+  transform: translate(var(--px, 0%), var(--py, 0%));
+}
+
+.nixon-blob-1 {
+  top: -30vmax; left: -25vmax;
+  background: radial-gradient(circle, #0ea5e9 0%, transparent 62%);
+  animation: nixon-drift-1 30s ease-in-out infinite;
+}
+.nixon-blob-2 {
+  bottom: -35vmax; right: -25vmax;
+  background: radial-gradient(circle, #ec4899 0%, transparent 62%);
+  animation: nixon-drift-2 30s ease-in-out infinite;
+}
+.nixon-blob-3 {
+  top: 15%; left: 20%;
+  background: radial-gradient(circle, #a855f7 0%, transparent 60%);
+  animation: nixon-drift-3 34s ease-in-out infinite;
+}
+
+@keyframes nixon-drift-1 {
+  0%, 100% { transform: translate(var(--px,0%), var(--py,0%)) scale(1); }
+  50%      { transform: translate(calc(var(--px,0%) + 12%), calc(var(--py,0%) + 8%)) scale(1.15); }
+}
+@keyframes nixon-drift-2 {
+  0%, 100% { transform: translate(var(--px,0%), var(--py,0%)) scale(1.1); }
+  50%      { transform: translate(calc(var(--px,0%) - 10%), calc(var(--py,0%) - 10%)) scale(1); }
+}
+@keyframes nixon-drift-3 {
+  0%, 100% { transform: translate(var(--px,0%), var(--py,0%)) scale(0.9); }
+  50%      { transform: translate(calc(var(--px,0%) + 8%), calc(var(--py,0%) - 12%)) scale(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nixon-blob { animation: none !important; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* every tap target clears 44px */
+a, button, input[type='checkbox'], select { min-height: 44px; }
+a.inline-link, button.inline-btn { min-height: 0; }
