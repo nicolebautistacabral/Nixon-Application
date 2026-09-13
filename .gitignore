@@ -5,6 +5,10 @@
 *.pem
 *-service-account*.json
 firebase-adminsdk-*.json
+# The cron SQL with the secret filled in, generated locally before pasting
+# into the Supabase SQL editor.
+cron-ready.sql
+
 # Google service-account keys download under many names. Ignore the lot.
 key.json
 *key.json
